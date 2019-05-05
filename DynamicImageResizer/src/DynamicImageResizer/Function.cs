@@ -17,19 +17,29 @@ namespace DynamicImageResizer
             var imageName = apiGatewayProxyRequest.QueryStringParameters["image-name"];
             var width = apiGatewayProxyRequest.QueryStringParameters["width"];
             var height = apiGatewayProxyRequest.QueryStringParameters["height"];
-            var image = _imageStorage.Get(imageName);
-            var resizedImage = ImageProcessor.ResizeImage(image, Convert.ToInt32(width), Convert.ToInt32(height));
+            var image = _imageStorage.Get("images/", imageName);
             var hash = ImageProcessor.hash(image);
             var cachedImageName = hash + "-" + width + "-" + height + ".png";
-            _imageStorage.Put(cachedImageName, resizedImage);
             var headers = new Dictionary<string, string>();
             headers.Add("Content-Type", "image/png");
             headers.Add("Content-Disposition", "attachment; filename=\"" + cachedImageName + "\"");
-            var base64String = ImageProcessor.ToBase64String(resizedImage);
+            if (_imageStorage.Exists("cache/", cachedImageName))
+            {
+                var cachedImage = _imageStorage.Get("cache/", cachedImageName);
+                return new APIGatewayProxyResponse
+                {
+                    Headers = headers,
+                    Body = ImageProcessor.ToBase64String(cachedImage),
+                    StatusCode = 200,
+                    IsBase64Encoded = true
+                };
+            }
+            var resizedImage = ImageProcessor.ResizeImage(image, Convert.ToInt32(width), Convert.ToInt32(height));
+            _imageStorage.Put(cachedImageName, resizedImage);
             return new APIGatewayProxyResponse
             {
                 Headers = headers,
-                Body = base64String,
+                Body = ImageProcessor.ToBase64String(resizedImage),
                 StatusCode = 200,
                 IsBase64Encoded = true
             };

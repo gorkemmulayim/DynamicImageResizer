@@ -1,3 +1,4 @@
+using System;
 using System.Drawing;
 using System.IO;
 using System.Net;
@@ -16,12 +17,12 @@ namespace DynamicImageResizer
             amazonS3 = new AmazonS3Client(RegionEndpoint.EUWest1);
         }
 
-        public Image Get(string name)
+        public Image Get(string keyPrefix, string imageName)
         {
             var getObjectRequest = new GetObjectRequest
             {
                 BucketName = "rootg-default",
-                Key = "images/" + name
+                Key = keyPrefix + imageName
             };
             var task = amazonS3.GetObjectAsync(getObjectRequest);
             var getObjectResponse = task.Result;
@@ -31,7 +32,7 @@ namespace DynamicImageResizer
             }
         }
 
-        public bool Put(string name, Image image)
+        public bool Put(string imageName, Image image)
         {
             using (var memoryStream = new MemoryStream())
             {
@@ -40,7 +41,7 @@ namespace DynamicImageResizer
                 var putObjectRequest = new PutObjectRequest
                 {
                     BucketName = "rootg-default",
-                    Key = "cache/" + name,
+                    Key = "cache/" + imageName,
                     ContentType = "image/png",
                     InputStream = memoryStream
                 };
@@ -48,6 +49,30 @@ namespace DynamicImageResizer
                 var putObjectResponse = task.Result;
                 return putObjectResponse.HttpStatusCode.Equals(HttpStatusCode.OK);
             }
+        }
+
+        public bool Exists(string keyPrefix, string imageName)
+        {
+            var getObjectMetadataRequest = new GetObjectMetadataRequest
+            {
+                BucketName = "rootg-default",
+                Key = keyPrefix + imageName
+            };
+            try
+            {
+                var task = amazonS3.GetObjectMetadataAsync(getObjectMetadataRequest);
+                task.Wait();
+            }
+            catch (AggregateException e)
+            {
+                if (e.GetBaseException() is AmazonS3Exception)
+                {
+                    var amazonS3Exception = (AmazonS3Exception) e.GetBaseException();
+                    if (amazonS3Exception.StatusCode.Equals(HttpStatusCode.NotFound)) return false;
+                }
+                throw;
+            }
+            return true;
         }
     }
 }
