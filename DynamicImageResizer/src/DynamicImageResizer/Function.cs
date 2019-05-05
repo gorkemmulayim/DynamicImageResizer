@@ -1,7 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Drawing.Imaging;
+using System.IO;
 using Amazon.Lambda.APIGatewayEvents;
 using Amazon.Lambda.Core;
 using Amazon.Lambda.Serialization.Json;
@@ -12,48 +12,37 @@ namespace DynamicImageResizer
 {
     public class Function
     {
-        public APIGatewayProxyResponse FunctionHandler(APIGatewayProxyRequest apigProxyEvent)
-        {
-            var name = apigProxyEvent.QueryStringParameters["name"];
-            var width = apigProxyEvent.QueryStringParameters["width"];
-            var height = apigProxyEvent.QueryStringParameters["height"];
-            Console.WriteLine("Name: " + name + ", " + "Width: " + width + ", " + "Height: " + height);
-            return new APIGatewayProxyResponse
-            {
-                Body = "Hello World!",
-                StatusCode = 200
-            };
-        }
+        private readonly ImageStorage _imageStorage = new ImageStorage();
 
-        public static void Main(string[] args)
+        public APIGatewayProxyResponse FunctionHandler(APIGatewayProxyRequest apiGatewayProxyRequest)
         {
-            var imageStorage = new ImageStorage();
-            var image = imageStorage.Get("lenna.jpeg");
-            var resizedImage = ResizeImage(image, 450, 450);
-            imageStorage.Put("lenna.jpeg", resizedImage);
+            var imageName = apiGatewayProxyRequest.QueryStringParameters["image-name"];
+            var width = apiGatewayProxyRequest.QueryStringParameters["width"];
+            var height = apiGatewayProxyRequest.QueryStringParameters["height"];
+            Console.WriteLine("Name: " + imageName + ", " + "Width: " + width + ", " + "Height: " + height);
+            var image = _imageStorage.Get(imageName);
+            var resizedImage = ResizeImage(image, Convert.ToInt32(width), Convert.ToInt32(height));
+            _imageStorage.Put(imageName, resizedImage);
+            using (var memoryStream = new MemoryStream())
+            {
+                var headers = new Dictionary<string, string>();
+                headers.Add("Content-Type", "image/png");
+                headers.Add("Content-Disposition", "attachment; filename=\"" + imageName + "\".png");
+                resizedImage.Save(memoryStream, resizedImage.RawFormat);
+                var base64String = Convert.ToBase64String(memoryStream.ToArray());
+                return new APIGatewayProxyResponse
+                {
+                    Headers = headers,
+                    Body = base64String,
+                    StatusCode = 200,
+                    IsBase64Encoded = true
+                };
+            }
         }
 
         public static Image ResizeImage(Image image, int width, int height)
         {
-            var rectangle = new Rectangle(0, 0, width, height);
-            var bitmap = new Bitmap(width, height);
-            bitmap.SetResolution(image.HorizontalResolution, image.VerticalResolution);
-            using (var graphics = Graphics.FromImage(bitmap))
-            {
-                graphics.CompositingMode = CompositingMode.SourceCopy;
-                graphics.CompositingQuality = CompositingQuality.HighQuality;
-                graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                graphics.SmoothingMode = SmoothingMode.HighQuality;
-                graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
-
-                using (var wrapMode = new ImageAttributes())
-                {
-                    wrapMode.SetWrapMode(WrapMode.TileFlipXY);
-                    graphics.DrawImage(image, rectangle, 0, 0, image.Width, image.Height, GraphicsUnit.Pixel, wrapMode);
-                }
-            }
-
-            return bitmap;
+            return new Bitmap(image, new Size(width, height));
         }
     }
 }
