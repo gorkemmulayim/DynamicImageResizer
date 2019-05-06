@@ -10,21 +10,21 @@ namespace DynamicImageResizer
 {
     public class ImageStorage
     {
-        private readonly IAmazonS3 amazonS3;
+        private readonly IAmazonS3 _amazonS3;
 
         public ImageStorage()
         {
-            amazonS3 = new AmazonS3Client(RegionEndpoint.EUWest1);
+            _amazonS3 = new AmazonS3Client(RegionEndpoint.EUWest1);
         }
 
-        public Image Get(string keyPrefix, string imageName)
+        public Image Get(string bucketName, string keyPrefix, string imageName)
         {
             var getObjectRequest = new GetObjectRequest
             {
-                BucketName = "rootg-default",
+                BucketName = bucketName,
                 Key = keyPrefix + imageName
             };
-            var task = amazonS3.GetObjectAsync(getObjectRequest);
+            var task = _amazonS3.GetObjectAsync(getObjectRequest);
             var getObjectResponse = task.Result;
             using (var stream = getObjectResponse.ResponseStream)
             {
@@ -32,7 +32,7 @@ namespace DynamicImageResizer
             }
         }
 
-        public bool Put(string imageName, Image image)
+        public bool Put(string bucketName, string keyPrefix, string imageName, Image image)
         {
             using (var memoryStream = new MemoryStream())
             {
@@ -40,27 +40,27 @@ namespace DynamicImageResizer
                 memoryStream.Position = 0;
                 var putObjectRequest = new PutObjectRequest
                 {
-                    BucketName = "rootg-default",
-                    Key = "cache/" + imageName,
+                    BucketName = bucketName,
+                    Key = keyPrefix + imageName,
                     ContentType = "image/png",
                     InputStream = memoryStream
                 };
-                var task = amazonS3.PutObjectAsync(putObjectRequest);
+                var task = _amazonS3.PutObjectAsync(putObjectRequest);
                 var putObjectResponse = task.Result;
                 return putObjectResponse.HttpStatusCode.Equals(HttpStatusCode.OK);
             }
         }
 
-        public bool Exists(string keyPrefix, string imageName)
+        public bool Exists(string bucketName, string keyPrefix, string imageName)
         {
             var getObjectMetadataRequest = new GetObjectMetadataRequest
             {
-                BucketName = "rootg-default",
+                BucketName = bucketName,
                 Key = keyPrefix + imageName
             };
             try
             {
-                var task = amazonS3.GetObjectMetadataAsync(getObjectMetadataRequest);
+                var task = _amazonS3.GetObjectMetadataAsync(getObjectMetadataRequest);
                 task.Wait();
             }
             catch (AggregateException e)
